@@ -328,28 +328,96 @@ photo_metadata <- photo_metadata[!is.na(photo_metadata$lat_map),]
 photo_metadata$url <- as.character(photo_metadata$url)
 ```
 
+```{r}
+library(RPostgreSQL)
+library(tidyverse)
+library(rpostgis)
+# library(dbplyr)
+
+#Enter the values for you database connection and connect
+{dsn_database = "postgis"            
+  dsn_hostname = "localhost"
+  dsn_port = "5432"               
+  dsn_uid = "postgres"        
+  dsn_pwd = "postgres"
+  
+  
+  #connect and see if the connection to the database is working
+  tryCatch({
+    drv <- dbDriver("PostgreSQL")
+    print("Connecting to database")
+    conn <- dbConnect(drv, 
+                      dbname = dsn_database,
+                      host = dsn_hostname, 
+                      port = dsn_port,
+                      user = dsn_uid, 
+                      password = dsn_pwd)
+    print("Connected!")
+  },
+  error=function(cond) {
+    print("Unable to connect to database.")
+  })
+}
+
+query <- paste(
+  'Select dra.digital_road_atlas_line_id, dra.road_name_full, dra.road_surface, dra.road_class, ST_Transform(dra.geom, 4326) as geom',
+  'FROM whse_basemapping.dra_dgtl_road_atlas_mpar_sp dra ',
+  'INNER JOIN whse_basemapping.fwa_watershed_groups_subdivided wsg ',
+  'ON ST_Intersects(dra.geom, wsg.geom) ',
+  'WHERE wsg.watershed_group_code = \'PARS\''
+)
+roads_sf <- st_as_sf(pgGetGeom(conn, query = query))
+
+query <- paste(
+  'Select fh.fish_habitat_id, fh.gnis_name, fh.fish_habitat, fh.slope_class, ST_Transform(fh.geom, 4326) as geom',
+  'FROM fish_passage.fish_habitat fh',
+  'WHERE fh.watershed_group_code = \'PARS\''
+)
+streams_sf <- st_as_sf(pgGetGeom(conn, query = query))
+```
+
 ```{r map,  out.width = '100%'}
 ##--------lets map it-----------------------------------------------------------------------
 ##time to set the watershed code here
 ##pass it get the watershed boundaries. Dissolve boundaries and display semi-transparent.
 ##add a culvert measurements output table with all the usual photos
 ##georeference the upstream and downstream photos from the camera by cross-referencing the time to the gps.
-
-
+library(leaflet.mapboxgl)
+options(mapbox.accessToken = NA)
 map <- leaflet() %>%
   leaflet(height=500, width=780) %>% 
   addTiles() %>%
-    addMouseCoordinates(proj4 = 26911) %>% ##can't seem to get it to render utms yet
-
+  addMouseCoordinates(proj4 = 26911) %>% ##can't seem to get it to render utms yet
   addProviderTiles("Esri.WorldImagery", group = "ESRI Aerial") %>% 
   addProviderTiles("Esri.WorldTopoMap", group = "Topo") %>%
-  # addMeasure() %>% 
-    # setView(lng = -105.644, lat = 51.618, zoom = 3) 
-  addPolylines(data=my_tracks$`125000_us_track1`,  opacity=1, color = 'red',
-                   fillOpacity = 0.75, weight=2) %>%
-  addPolylines(data=my_tracks$`125000_ds_track`,  opacity=1, color = 'red',
-               fillOpacity = 0.75, weight=2) %>%
-  
+  addPolylines(
+    data=roads_sf,  
+    opacity=1, 
+    color = 'black',
+    fillOpacity = 0.75, 
+    weight=2
+  ) %>%
+  addPolylines(
+    data=streams_sf,  
+    opacity=1, 
+    color = 'blue',
+    fillOpacity = 0.75, 
+    weight=2
+  ) %>%
+  addPolylines(
+    data=my_tracks$`125000_ds_track`,  
+    opacity=1, 
+    color = 'red',
+    fillOpacity = 0.75, 
+    weight=2
+  ) %>%
+  addPolylines(
+    data=my_tracks$`125000_us_track1`,  
+    opacity=1, 
+    color = 'red',
+    fillOpacity = 0.75, 
+    weight=2
+  ) %>%
   addCircleMarkers(
     data=pscis_pts_sf,
     label = pscis_pts_sf$pscis_crossing_id,
@@ -374,15 +442,18 @@ map <- leaflet() %>%
       photoPoints$filename,
       "' width=200, height=125></a>"
       ),
-clusterOptions = markerClusterOptions(),
-label = photo_metadata$filename) %>%
+    clusterOptions = markerClusterOptions(),
+    label = photo_metadata$filename
+  ) %>%
   addLayersControl(
     baseGroups = c("ESRI Aerial", "Topo"),
     overlayGroups = c(my_tracks$`125000_ds_track`),
-    options = layersControlOptions(collapsed = F)) %>% 
-  
-    addMiniMap(tiles = providers$"Esri.WorldTopoMap",
-             zoomLevelOffset = -6)    # setView(lng = -105.644, lat = 51.618, zoom = 3) ##this becomes the latest and greatest pscis crossing utm
+    options = layersControlOptions(collapsed = F)
+  ) %>% 
+  addMiniMap(
+    tiles = providers$"Esri.WorldTopoMap",
+    zoomLevelOffset = -6
+  )    # setView(lng = -105.644, lat = 51.618, zoom = 3) ##this becomes the latest and greatest pscis crossing utm
 map
 ```
 
