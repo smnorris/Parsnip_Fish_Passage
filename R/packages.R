@@ -23,7 +23,9 @@ pacman::p_load(
   lubridate,
   exifr,
   leafpop,
-  tools
+  tools,
+  gt,
+  rpostgis
   )
 #pacman::p_load(mapview)
 
