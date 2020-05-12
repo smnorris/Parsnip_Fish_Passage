@@ -1,7 +1,6 @@
 
 # install.packages("pacman")  ##unhash and save before the first time you run the script
 # pacman::p_install_gh("NewGraphEnvironment/altools")  ##unhash and save before the first time you run the script
-pacman::p_install_gh("rstudio/leaflet.mapboxgl")
 pacman::p_load(drake)
 pacman::p_load(tidyverse)
 pacman::p_load(tibble)
