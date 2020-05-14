@@ -5,6 +5,10 @@
 library(RPostgreSQL)
 library(tidyverse)
 library(rpostgis)
+library(sf)
+library(leaflet)
+library(leafem)
+library(leafpop)
 
 #Enter the values for you database connection and connect
 {dsn_database = "postgis"            
