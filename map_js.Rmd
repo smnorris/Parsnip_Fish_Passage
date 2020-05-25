@@ -1,0 +1,233 @@
+---
+output: 
+  html_document:
+    self_contained: true 
+ 
+params:
+  set_title: "My Title!"
+title: "test map"
+date: "`r format(Sys.time(), '%B %Y')`"
+---
+
+
+``` {r}
+library(sf)
+library(dplyr)
+
+# save points to geojson
+pscis_pts <- drake::readd(pscis)
+# remove points with no coordinates
+pscis_pts <- pscis_pts[!is.na(pscis_pts$easting),]
+pscis_pts_sf <- st_as_sf(x = pscis_pts, coords = c("easting", "northing"), crs = "EPSG:32610")
+pscis_pts_sf = st_transform(pscis_pts_sf, 4326)
+pscis_pts_sf = select(pscis_pts_sf, pscis_crossing_id, stream_name, road_name)
+#st_write(pscis_pts_sf, "data/pscis_pts.geojson")
+
+drake::loadd(photo_metadata)
+# remove photos with no coordinates
+photo_metadata <- photo_metadata[!is.na(photo_metadata$lat_map),]
+photos_sf <- st_as_sf(x = photo_metadata, coords = c("lon_map", "lat_map"), crs = "EPSG:4326")
+photos_gj = select(photos_sf, crossing_id, filename, url)
+#st_write(photos_gj, "data/photo_metadata.geojson")
+```
+
+
+
+
+<script src='https://api.tiles.mapbox.com/mapbox-gl-js/v1.3.0/mapbox-gl.js'></script>
+<link href='https://api.tiles.mapbox.com/mapbox-gl-js/v1.3.0/mapbox-gl.css' rel='stylesheet' />
+<style>
+body { margin:0; padding:0; }
+#map { position:absolute; top:0; bottom:0; width:100%; }
+</style>
+</head>
+
+<div id='map'></div>
+
+```{js}
+
+
+mapboxgl.accessToken = 'pk.eyJ1IjoiaGlsbGNyZXN0Z2VvIiwiYSI6IjREMjlhTlkifQ.-fItotK2VgCxPHt4ocoMYA';
+var map = new mapboxgl.Map({
+container: 'map', // container id
+style: 'mapbox://styles/mapbox/light-v10', // stylesheet location
+center: [-121.8013, 54.4854], // starting position [lng, lat]
+zoom: 12 // starting zoom
+});
+
+
+
+map.on('load', function() {
+	map.addSource('streams', {
+                "type": "vector",
+                "tiles": ['https://www.hillcrestgeo.ca/fwa/v1/mvt/whse_basemapping.fwa_stream_networks_sp/{z}/{x}/{y}'],
+                "maxzoom": 18,
+                "minzoom": 11
+  });
+  
+  map.addSource('roads', {
+            "type": "vector",
+            "tiles": ['https://www.hillcrestgeo.ca/fwa/v1/mvt/whse_basemapping.dra_dgtl_road_atlas_mpar_sp/{z}/{x}/{y}?columns=road_class'],
+            "maxzoom": 18,
+            "minzoom": 10
+  });
+  
+  map.addSource('photos', {
+    type: 'geojson',
+    data: 'https://gist.githubusercontent.com/smnorris/c7d4e23a9261f213d164757e8fcef29b/raw/359e7ec411f0d5c60796bd46d6b285f8670c5124/photo_metadata.geojson'
+	});
+
+	map.addLayer({
+            "id": "streams",
+            "type": "line",
+            "source": "streams",
+            'source-layer': 'whse_basemapping.fwa_stream_networks_sp',
+            "layout": {
+                "line-cap": "round",
+                "line-join": "round"
+            },
+            "paint": {
+                "line-opacity": 0.6,
+                "line-color": "#a0c8f0",
+                "line-width": 2
+            }
+        },
+        'waterway-label'
+    );
+
+    map.addLayer({
+        "id": "roads",
+        "type": "line",
+        "source": "roads",
+        'source-layer': 'whse_basemapping.dra_dgtl_road_atlas_mpar_sp',
+        "layout": {
+            "line-join": "round",
+            "line-cap": "round"
+        },
+        "filter": ["!in", "road_class", "ferry"],
+        "paint": {
+            "line-width": [
+                "interpolate", ["exponential", 1.5],
+                ["zoom"],
+                5,
+                [
+                    "match",
+                    ["get", "road_class"],
+                    "freeway",
+                    0.5,
+                    "highway",
+                    0.5,
+                    "arterial",
+                    0.5,
+                    "ramp",
+                    0.5,
+                    "collector",
+                    0.5,
+                    "local",
+                    0,
+                    0
+                ],
+                12,
+                [
+                    "match",
+                    ["get", "road_class"],
+                    "freeway",
+                    3,
+                    "highway",
+                    3,
+                    "arterial",
+                    2,
+                    "ramp",
+                    3,
+                    "collector",
+                    2,
+                    "local",
+                    0.5,
+                    0
+                ],
+                18,
+                [
+                    "match",
+                    ["get", "road_class"],
+                    "freeway",
+                    30,
+                    "highway",
+                    30,
+                    "arterial",
+                    30,
+                    "ramp",
+                    12,
+                    "collector",
+                    24,
+                    "local",
+                    12,
+                    0
+                ]
+            ],
+            "line-color": [
+                "match",
+                ["get", "road_class"],
+                "local",
+                "#595959",
+                "street_limited",
+                "hsl(38, 100%, 98%)",
+                "service",
+                "hsl(38, 100%, 98%)",
+                "track",
+                "hsl(38, 100%, 98%)",
+                "link",
+                "hsl(38, 100%, 98%)",
+                "#595959"
+            ]
+
+        },
+        "interactive": true
+
+    }, );
+    
+map.addLayer({
+'id': 'photo-points',
+'type': 'circle',
+'source': 'photos',
+ "paint": {
+                        "circle-radius": 5,
+                        "circle-color": "#ff0000"
+                }
+});
+
+               
+                
+                
+
+});
+
+// When a click event occurs on a feature in the places layer, open a popup at the
+// location of the feature, with description HTML from its properties.
+map.on('click', 'photo-points', function(e) {
+var coordinates = e.features[0].geometry.coordinates.slice();
+var photourl = e.features[0].properties.url;
+var photohtml = '';
+
+console.log(photohtml)
+ 
+// Ensure that if the map is zoomed out such that multiple
+// copies of the feature are visible, the popup appears
+// over the copy being pointed to.
+while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
+coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
+}
+ 
+new mapboxgl.Popup()
+.setLngLat(coordinates)
+.setHTML(photohtml.concat(
+	"<a href='",
+	photourl,
+	"'><img src='",
+	photourl,
+	"' alt='photo' width=200, height=125></a>"
+)
+)
+.addTo(map);
+});
+
+```
